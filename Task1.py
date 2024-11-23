@@ -1,7 +1,7 @@
 import numpy as np
 import cvxpy as cp
 from sklearn.metrics import normalized_mutual_info_score, accuracy_score
-
+from scipy.spatial.distance import cdist
 
 class MyClassifier:
     """Task 1"""
@@ -63,20 +63,49 @@ class MyClassifier:
 
 class MyClustering:
     """Task 2"""
+    """https://cseweb.ucsd.edu/~dasgupta/291-geom/kmedian.pdf"""
 
-    def __init__(self, K):
+    def __init__(self, K, iters = 100):
         self.K = K  # number of classes
         self.labels = None
 
         ### TODO: Initialize other parameters needed in your algorithm
         # examples:
-        # self.cluster_centers_ = None
+        self.cluster_centers_ = None
+        self.iters = iters
 
     def train(self, trainX):
         """
         Task 2-2
         TODO: cluster trainX using LP(s) and store the parameters that discribe the identified clusters
         """
+
+        N, _ = trainX.shape
+        self.cluster_centers_ = trainX[np.random.choice(N, self.K, replace=False), : ]
+        self.labels = np.full(N, -1, dtype=int)
+
+        for i in range(self.iters):
+            d = cdist(trainX, self.cluster_centers_, metric='euclidean')
+            y = cp.Variable(self.K)
+            x = cp.Variable((N, self.K))
+
+            prob = cp.Problem(cp.Minimize(cp.sum(cp.multiply(d, x))), [
+                cp.sum(x, axis=1) == 1,
+                x <= cp.reshape(y, (1, self.K)),
+                cp.sum(y) == self.K,
+                x >= 0, x <= 1,
+                y >= 0, y <= 1,
+            ])
+
+            prob.solve()
+
+            new_labels = np.argmax(x.value, axis=1)
+
+            if np.array_equal(new_labels, self.labels):
+                break
+
+            self.labels = new_labels
+            self.cluster_centers_ = np.array([np.median(trainX[self.labels == k], axis=0) for k in range(self.K)])
 
         # Update and teturn the cluster labels of the training data (trainX)
         return self.labels
@@ -86,6 +115,8 @@ class MyClustering:
         Task 2-2
         TODO: assign new data points to the existing clusters
         """
+        d = cdist(testX, self.cluster_centers_, metric='euclidean')
+        pred_labels = np.argmin(d, axis=1)
 
         # Return the cluster labels of the input data (testX)
         return pred_labels
