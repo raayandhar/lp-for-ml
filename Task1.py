@@ -32,12 +32,12 @@ class MyClassifier:
 
         self.W = cp.Variable((M, self.K))
         self.b = cp.Variable((self.K, 1))
-        slack = cp.Variable(1)
+        slack = cp.Variable((N, self.K))
         
-        prob = cp.Problem(cp.Minimize(slack),
+        prob = cp.Problem(cp.Minimize(cp.sum(slack)),
                           [slack >= 0,
-                           trainX @ self.W + np.ones((N, 1)) @ self.b.T - y_1hot <= slack,
-                           trainX @ self.W + np.ones((N, 1)) @ self.b.T - y_1hot >= -slack
+                           trainX @ self.W + cp.sum(self.b.T) - y_1hot <= slack,
+                           trainX @ self.W + cp.sum(self.b.T) - y_1hot >= -slack
                            ])
         prob.solve()
         print(f"Optimal value:{prob.value}")
@@ -50,7 +50,6 @@ class MyClassifier:
         N, M = testX.shape
         # Return the predicted class labels of the input data (testX)
         predY = testX @ self.W.value + np.ones((N, 1)) @ self.b.value.T
-        print("predY.shape", predY.shape)
         predY = np.argmax(predY, axis=1)
         return self.cc_inverse[predY]
 
@@ -149,6 +148,8 @@ class MyClustering:
     def align_cluster_labels(self, cluster_labels, reference):
         """update the cluster labels to match the class labels"""
         aligned_lables = np.zeros_like(cluster_labels)
+        print(f"reference shape:{reference}")
+        # print(f"cluster labels shape:{cluster_labels}")
         for i in range(len(cluster_labels)):
             aligned_lables[i] = reference[cluster_labels[i]]
 
