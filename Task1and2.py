@@ -148,8 +148,6 @@ class MyClustering:
     def align_cluster_labels(self, cluster_labels, reference):
         """update the cluster labels to match the class labels"""
         aligned_lables = np.zeros_like(cluster_labels)
-        print(f"reference shape:{reference}")
-        # print(f"cluster labels shape:{cluster_labels}")
         for i in range(len(cluster_labels)):
             aligned_lables[i] = reference[cluster_labels[i]]
 
