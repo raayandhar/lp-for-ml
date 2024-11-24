@@ -1,128 +1,134 @@
 import numpy as np
+import cvxpy as cp
 from sklearn.metrics import normalized_mutual_info_score, accuracy_score
+from scipy.spatial.distance import cdist
 
 
 class MyClassifier:
-    """Task 1"""
+    def __init__(self, class_num: int):
+        self.class_num = class_num  # number of classes
+        self.w = None
+        self.b = None
+        self.cc_inverse = None  # Used for decompressing the coordinate compression
 
-    def __init__(self, K):
-        self.K = K  # number of classes
+    def train(self, train_x: np.ndarray, train_y: np.ndarray):
+        n, m = train_x.shape
+        # Coordinate compression
+        self.cc_inverse, train_y_cc = np.unique(train_y, return_inverse=True)
 
-        ### TODO: Initialize other parameters needed in your algorithm
-        # examples:
-        # self.w = None
-        # self.b = None
+        y_1hot = np.zeros((n, self.class_num))
+        y_1hot[np.arange(n), train_y_cc.astype(int)] = 1
 
-    def train(self, trainX, trainY):
-        """
-        Task 1-2
-        TODO: train classifier using LP(s) and updated parameters needed in your algorithm
-        """
+        self.w = cp.Variable((m, self.class_num))
+        self.b = cp.Variable((self.class_num, 1))
+        slack = cp.Variable((n, self.class_num))
 
-    def predict(self, testX):
-        """
-        Task 1-2
-        TODO: predict the class labels of input data (testX) using the trained classifier
-        """
+        prob = cp.Problem(
+            cp.Minimize(cp.sum(slack)),
+            [
+                slack >= 0,
+                train_x @ self.w + cp.sum(self.b.T) - y_1hot <= slack,
+                train_x @ self.w + cp.sum(self.b.T) - y_1hot >= -slack,
+            ],
+        )
+        prob.solve()
 
+    def predict(self, test_x: np.ndarray) -> np.ndarray:
+        n, m = test_x.shape
         # Return the predicted class labels of the input data (testX)
-        return predY
+        pred_y = test_x @ self.w.value + np.ones((n, 1)) @ self.b.value.T
+        pred_y = np.argmax(pred_y, axis=1)
+        return self.cc_inverse[pred_y]
 
-    def evaluate(self, testX, testY):
-        predY = self.predict(testX)
-        accuracy = accuracy_score(testY, predY)
-
-        return accuracy
+    def evaluate(self, test_x: np.ndarray, test_y: np.ndarray) -> float:
+        pred_y = self.predict(test_x)
+        return accuracy_score(test_y, pred_y)
 
 
 class MyClustering:
-    """Task 2"""
-
-    def __init__(self, K):
-        self.K = K  # number of classes
+    def __init__(self, class_num: int, iters: int = 100):
+        self.class_num = class_num
         self.labels = None
+        self.centers = None
+        self.iters = iters
 
-        ### TODO: Initialize other parameters needed in your algorithm
-        # examples:
-        # self.cluster_centers_ = None
+    def train(self, train_x: np.ndarray):
+        n, _ = train_x.shape
+        self.centers = train_x[np.random.choice(n, self.class_num, replace=False), :]
+        self.labels = np.full(n, -1, dtype=int)
 
-    def train(self, trainX):
-        """
-        Task 2-2
-        TODO: cluster trainX using LP(s) and store the parameters that discribe the identified clusters
-        """
+        for i in range(self.iters):
+            d = cdist(train_x, self.centers, metric="euclidean")
+            y = cp.Variable(self.class_num)
+            x = cp.Variable((n, self.class_num))
 
-        # Update and teturn the cluster labels of the training data (trainX)
+            obj = cp.Minimize(cp.sum(cp.multiply(d, x)))
+            constraints = [
+                cp.sum(x, axis=1) == 1,
+                x <= cp.reshape(y, (1, self.class_num)),
+                cp.sum(y) == self.class_num,
+                x >= 0,
+                x <= 1,
+                y >= 0,
+                y <= 1,
+            ]
+            prob = cp.Problem(obj, constraints)
+            prob.solve()
+
+            new_labels = np.argmax(x.value, axis=1)
+
+            if np.array_equal(new_labels, self.labels):
+                break
+
+            self.labels = new_labels
+            self.centers = np.array(
+                [
+                    np.median(train_x[self.labels == k], axis=0)
+                    for k in range(self.class_num)
+                ]
+            )
+
         return self.labels
 
-    def infer_cluster(self, testX):
-        """
-        Task 2-2
-        TODO: assign new data points to the existing clusters
-        """
+    def infer_cluster(self, test_x: np.ndarray):
+        dists = cdist(test_x, self.centers, metric="euclidean")
+        return np.argmin(dists, axis=1)
 
-        # Return the cluster labels of the input data (testX)
-        return pred_labels
-
-    def evaluate_clustering(self, trainY):
-        label_reference = self.get_class_cluster_reference(self.labels, trainY)
+    def evaluate_clustering(self, train_y: np.ndarray):
+        label_reference = self.get_class_cluster_reference(self.labels, train_y)
         aligned_labels = self.align_cluster_labels(self.labels, label_reference)
-        nmi = normalized_mutual_info_score(trainY, aligned_labels)
+        return normalized_mutual_info_score(train_y, aligned_labels)
 
-        return nmi
-
-    def evaluate_classification(self, trainY, testX, testY):
-        pred_labels = self.infer_cluster(testX)
-        label_reference = self.get_class_cluster_reference(self.labels, trainY)
+    def evaluate_classification(
+        self, train_y: np.ndarray, test_x: np.ndarray, test_y: np.ndarray
+    ) -> float:
+        pred_labels = self.infer_cluster(test_x)
+        label_reference = self.get_class_cluster_reference(self.labels, train_y)
         aligned_labels = self.align_cluster_labels(pred_labels, label_reference)
-        accuracy = accuracy_score(testY, aligned_labels)
+        return accuracy_score(test_y, aligned_labels)
 
-        return accuracy
-
-    def get_class_cluster_reference(self, cluster_labels, true_labels):
-        """assign a class label to each cluster using majority vote"""
+    def get_class_cluster_reference(
+        self, cluster_labels: np.ndarray, true_labels: np.ndarray
+    ):
+        """Assign a class label to each cluster using majority vote"""
         label_reference = {}
         for i in range(len(np.unique(cluster_labels))):
             index = np.where(cluster_labels == i, 1, 0)
             num = np.bincount(true_labels[index == 1]).argmax()
             label_reference[i] = num
-
         return label_reference
 
-    def align_cluster_labels(self, cluster_labels, reference):
+    def align_cluster_labels(self, cluster_labels: np.ndarray, reference):
         """update the cluster labels to match the class labels"""
         aligned_lables = np.zeros_like(cluster_labels)
         for i in range(len(cluster_labels)):
             aligned_lables[i] = reference[cluster_labels[i]]
-
         return aligned_lables
 
 
 class MyLabelSelection:
-    """Task 3 (Option 1)"""
+    def __init__(self, ratio: float):
+        self.ratio = ratio
 
-    def __init__(self, ratio):
-        self.ratio = ratio  # percentage of data to label
-        ### TODO: Initialize other parameters needed in your algorithm
-
-    def select(self, trainX):
-        """Task 3-2"""
-
-        # Return an index list that specifies which data points to label
+    def select(self, train_x: np.ndarray):
         return data_to_label
-
-
-class MyFeatureSelection:
-    """Task 3 (Option 2)"""
-
-    def __init__(self, num_features):
-        self.num_features = num_features  # target number of features
-        ### TODO: Initialize other parameters needed in your algorithm
-
-    def construct_new_features(
-        self, trainX, trainY=None
-    ):  # NOTE: trainY can only be used for construting features for classification task
-        """Task 3-2"""
-
-        # Return an index list that specifies which features to keep
-        return feat_to_keep
