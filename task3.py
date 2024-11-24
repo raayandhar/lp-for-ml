@@ -29,17 +29,16 @@ class MyClassifier:
 
         y_1hot = np.zeros((N, self.K))
         y_1hot[np.arange(N), trainY_cc.astype(int)] = 1
-
         self.W = cp.Variable((M, self.K))
         self.b = cp.Variable((self.K, 1))
         slack = cp.Variable((N, self.K))
 
-        prob = cp.Problem(cp.Minimize(cp.sum(slack)),
+        prob = cp.Problem(cp.Minimize(cp.sum(slack) / N),
                           [slack >= 0,
                            trainX @ self.W + cp.sum(self.b.T) - y_1hot <= slack,
                            trainX @ self.W + cp.sum(self.b.T) - y_1hot >= -slack
                            ])
-        prob.solve()
+        prob.solve(solver=cp.ECOS_BB)
         print(f"Optimal value:{prob.value}")
 
     def predict(self, testX):
@@ -62,49 +61,20 @@ class MyClassifier:
 
 class MyClustering:
     """Task 2"""
-    """https://cseweb.ucsd.edu/~dasgupta/291-geom/kmedian.pdf"""
 
-    def __init__(self, K, iters = 100):
+    def __init__(self, K):
         self.K = K  # number of classes
         self.labels = None
 
         ### TODO: Initialize other parameters needed in your algorithm
         # examples:
-        self.cluster_centers_ = None
-        self.iters = iters
+        # self.cluster_centers_ = None
 
     def train(self, trainX):
         """
         Task 2-2
         TODO: cluster trainX using LP(s) and store the parameters that discribe the identified clusters
         """
-
-        N, _ = trainX.shape
-        self.cluster_centers_ = trainX[np.random.choice(N, self.K, replace=False), : ]
-        self.labels = np.full(N, -1, dtype=int)
-
-        for i in range(self.iters):
-            d = cdist(trainX, self.cluster_centers_, metric='euclidean')
-            y = cp.Variable(self.K)
-            x = cp.Variable((N, self.K))
-
-            prob = cp.Problem(cp.Minimize(cp.sum(cp.multiply(d, x))), [
-                cp.sum(x, axis=1) == 1,
-                x <= cp.reshape(y, (1, self.K)),
-                cp.sum(y) == self.K,
-                x >= 0, x <= 1,
-                y >= 0, y <= 1,
-            ])
-
-            prob.solve()
-
-            new_labels = np.argmax(x.value, axis=1)
-
-            if np.array_equal(new_labels, self.labels):
-                break
-
-            self.labels = new_labels
-            self.cluster_centers_ = np.array([np.median(trainX[self.labels == k], axis=0) for k in range(self.K)])
 
         # Update and teturn the cluster labels of the training data (trainX)
         return self.labels
@@ -114,8 +84,6 @@ class MyClustering:
         Task 2-2
         TODO: assign new data points to the existing clusters
         """
-        d = cdist(testX, self.cluster_centers_, metric='euclidean')
-        pred_labels = np.argmin(d, axis=1)
 
         # Return the cluster labels of the input data (testX)
         return pred_labels
@@ -153,7 +121,6 @@ class MyClustering:
 
         return aligned_lables
 
-
 class MyLabelSelection:
     """Task 3 (Option 1)"""
 
@@ -161,6 +128,7 @@ class MyLabelSelection:
         self.ratio = ratio  # percentage of data to label
         self.epsilon = None
         self.n_samples_to_label = None
+        self.w = None
 
     def select(self, trainX):
         """
@@ -193,13 +161,14 @@ class MyLabelSelection:
         if self.epsilon is None:
             # should be on ratio?
             self.epsilon = np.percentile(distance_matrix, 5)
+            print(f"Epsilon: {self.epsilon}")
 
         # for each x_j, its neighborhood is N_j = {i | D_{ij} <= epsilon}
         neighborhoods = (distance_matrix <= self.epsilon).astype(int)
 
         # coverage counts
         w = np.sum(neighborhoods, axis=1)
-        # print(w)
+        self.w = w
 
         # density_scores = np.sum(neighborhoods, axis=1)
         # density_scores = np.log(density_scores + 1)
@@ -238,6 +207,7 @@ class MyLabelSelection:
 
         prob = cp.Problem(objective, constraints)
         prob.solve()
+        print(f"Optimal value from label selection:{prob.value}")
 
         z_lp = z.value
         z_lp = np.clip(z_lp, 0, 1)
@@ -257,24 +227,14 @@ class MyLabelSelection:
             z_rounded[to_one] = 1
 
         data_to_label = np.where(z_rounded == 1)[0]
+
+        np.random.seed(42)
+        random_indices = np.random.choice(n_samples, n_labels, replace=False)
+
+        data_to_label = random_indices
+
         return data_to_label
 
-
-
-class MyFeatureSelection:
-    """Task 3 (Option 2)"""
-
-    def __init__(self, num_features):
-        self.num_features = num_features  # target number of features
-        ### TODO: Initialize other parameters needed in your algorithm
-
-    def construct_new_features(
-        self, trainX, trainY=None
-    ):  # NOTE: trainY can only be used for construting features for classification task
-        """Task 3-2"""
-
-        # Return an index list that specifies which features to keep
-        return feat_to_keep
 
 
 class MyFeatureSelection:
