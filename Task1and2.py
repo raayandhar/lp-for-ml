@@ -34,12 +34,17 @@ class MyClassifier:
         self.b = cp.Variable((self.K, 1))
         slack = cp.Variable((N, self.K))
 
-        prob = cp.Problem(cp.Minimize(cp.sum(slack)),
+        prob = cp.Problem(cp.Minimize(cp.sum(slack) / N),
                           [slack >= 0,
-                           trainX @ self.W + cp.sum(self.b.T) - y_1hot <= slack,
-                           trainX @ self.W + cp.sum(self.b.T) - y_1hot >= -slack
+                           trainX @ self.W + np.ones((N, 1)) @ (self.b.T) - y_1hot <= slack,
+                           trainX @ self.W + np.ones((N, 1)) @ (self.b.T) - y_1hot >= -slack
                            ])
         prob.solve()
+        print(self.W.value)
+        print(self.b.value)
+        print(trainX)
+        print(trainY)
+        print(trainX @ self.W.value + np.ones((N, 1)) @ self.b.value.T)
         print(f"Optimal value:{prob.value}")
 
     def predict(self, testX):
