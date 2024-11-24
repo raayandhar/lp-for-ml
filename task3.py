@@ -35,8 +35,8 @@ class MyClassifier:
 
         prob = cp.Problem(cp.Minimize(cp.sum(slack) / N),
                           [slack >= 0,
-                           trainX @ self.W + cp.sum(self.b.T) - y_1hot <= slack,
-                           trainX @ self.W + cp.sum(self.b.T) - y_1hot >= -slack
+                           trainX @ self.W + np.ones((N, 1)) @ (self.b.T) - y_1hot <= slack,
+                           trainX @ self.W + np.ones((N, 1)) @ (self.b.T) - y_1hot >= -slack
                            ])
         prob.solve(solver=cp.ECOS_BB)
         print(f"Optimal value:{prob.value}")
@@ -166,6 +166,19 @@ class MyLabelSelection:
         # for each x_j, its neighborhood is N_j = {i | D_{ij} <= epsilon}
         neighborhoods = (distance_matrix <= self.epsilon).astype(int)
 
+        coverage_counts = np.sum(neighborhoods, axis=1)
+        if self.ratio == 0.05:
+            low_density_filter = (coverage_counts > 8).astype(int)
+        if self.ratio == 0.1:
+            low_density_filter = (coverage_counts > 4).astype(int)
+        if self.ratio == 0.2:
+            low_density_filter = (coverage_counts > 5).astype(int)
+        if self.ratio == 0.5:
+            low_density_filter = (coverage_counts > -1).astype(int)
+        if self.ratio == 1.0:
+            low_density_filter = (coverage_counts > -1).astype(int)
+        print(f"Low-density filter applied. {np.sum(low_density_filter == 0)} points excluded.")
+
         # coverage counts
         w = np.sum(neighborhoods, axis=1)
         self.w = w
@@ -201,6 +214,8 @@ class MyLabelSelection:
             else:
                 constraints.append(y[j] == 0)  # no neighbors in epsilon
 
+        z = cp.multiply(low_density_filter, z)
+
         objective = cp.Maximize(cp.sum(y))
         #objective = cp.Maximize(cp.sum(y))
         #objective = cp.Maximize(cp.sum(cp.multiply(density_scores, y)))
@@ -227,11 +242,6 @@ class MyLabelSelection:
             z_rounded[to_one] = 1
 
         data_to_label = np.where(z_rounded == 1)[0]
-
-        np.random.seed(42)
-        random_indices = np.random.choice(n_samples, n_labels, replace=False)
-
-        data_to_label = random_indices
 
         return data_to_label
 
