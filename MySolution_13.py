@@ -24,7 +24,7 @@ class MyClassifier:
         slack = cp.Variable((n, self.class_num))
 
         prob = cp.Problem(
-            cp.Minimize(cp.sum(slack)),
+            cp.Minimize(cp.sum(slack) / n),
             [
                 slack >= 0,
                 train_x @ self.w + cp.sum(self.b.T) - y_1hot <= slack,
@@ -127,8 +127,19 @@ class MyClustering:
 
 
 class MyLabelSelection:
-    def __init__(self, ratio: float):
-        self.ratio = ratio
+    def __init__(self, ratio):
+        self.ratio = ratio  # percentage of data to label
 
     def select(self, train_x: np.ndarray):
-        return data_to_label
+        take_num = int(len(train_x) * self.ratio)
+        cluster = MyClustering(take_num, 10)
+        labels = cluster.train(train_x)
+        centers = cluster.centers
+
+        inds = np.full(take_num, -1)
+        for t in range(take_num):
+            group = np.where(labels == t)[0]
+            dists = np.linalg.norm(train_x[group] - centers[t], axis=1)
+            inds[t] = group[np.argmin(dists)]
+
+        return inds
