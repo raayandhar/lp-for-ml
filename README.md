@@ -1,4 +1,4 @@
-# ECE 236A Project
+# lp-for-ml (Linear Programming for Machine Learning)
 
 Final project for ECE236A: Linear Programming.
 
