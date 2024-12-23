@@ -1,6 +1,8 @@
 # ECE 236A Project
 
-UCLA linear programming project
+Final project for ECE236A: Linear Programming.
+
+This project was selected to present in class.
 
 1. `python3 -m venv venv`
 2. `source venv/bin/activate`
