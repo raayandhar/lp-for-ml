@@ -1,4 +1,4 @@
-# lp-for-ml (Linear Programming for Machine Learning)
+# lp-for-ml
 
 Final project for ECE236A: Linear Programming.
 
